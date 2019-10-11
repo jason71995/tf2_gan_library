@@ -136,7 +136,7 @@ class SNConv2D(Conv2D):
         sigma = tf.reduce_sum(tf.matmul(_u, W_mat) * _v)
 
         self.u.assign(tf.keras.backend.in_train_phase(_u, self.u))
-        return w / sigma
+        return w / (sigma + 1e-8)
 
     def l2_norm(self, x):
         return x / tf.sqrt(tf.reduce_sum(tf.square(x)) + 1e-8)
@@ -193,7 +193,7 @@ class SNDense(Dense):
         sigma = tf.reduce_sum(tf.matmul(_u, W_mat) * _v)
 
         self.u.assign(tf.keras.backend.in_train_phase(_u, self.u))
-        return w / sigma
+        return w / (sigma + 1e-8)
 
     def l2_norm(self, x):
         return x / tf.sqrt(tf.reduce_sum(tf.square(x)) + 1e-8)
