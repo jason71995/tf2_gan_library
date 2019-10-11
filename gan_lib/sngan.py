@@ -134,9 +134,10 @@ class SNConv2D(Conv2D):
             _u = self.l2_norm(tf.matmul(_v, W_mat, transpose_b=True))
 
         sigma = tf.reduce_sum(tf.matmul(_u, W_mat) * _v)
+        sigma = tf.cond(sigma == 0, lambda: 1e-8, lambda: sigma)
 
         self.u.assign(tf.keras.backend.in_train_phase(_u, self.u))
-        return w / (sigma + 1e-8)
+        return w / sigma
 
     def l2_norm(self, x):
         return x / tf.sqrt(tf.reduce_sum(tf.square(x)) + 1e-8)
@@ -191,9 +192,10 @@ class SNDense(Dense):
             _u = self.l2_norm(tf.matmul(_v, W_mat, transpose_b=True))
 
         sigma = tf.reduce_sum(tf.matmul(_u, W_mat) * _v)
+        sigma = tf.cond(sigma == 0, lambda: 1e-8, lambda: sigma)
 
         self.u.assign(tf.keras.backend.in_train_phase(_u, self.u))
-        return w / (sigma + 1e-8)
+        return w / sigma
 
     def l2_norm(self, x):
         return x / tf.sqrt(tf.reduce_sum(tf.square(x)) + 1e-8)
