@@ -58,7 +58,7 @@ def build_train_step(generator, discriminator):
         pred_real, pred_fake = tf.split(discriminator(tf.concat([real_image, fake_image], axis=0)), num_or_size_splits=2, axis=0)
 
 
-        alpha = tf.random.normal((tf.shape(real_image)[0],1,1,1), 0.0, 1.0)
+        alpha = tf.random.uniform((tf.shape(real_image)[0],1,1,1), 0.0, 1.0)
         interpolates = (1 - alpha) * real_image + alpha * fake_image
         grad = tf.gradients(discriminator(interpolates), [interpolates])[0]
         norm_grad = tf.sqrt(tf.reduce_sum(tf.square(grad), axis=[1, 2, 3]) + 1e-8)
