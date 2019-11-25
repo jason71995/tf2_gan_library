@@ -7,6 +7,7 @@ from gan_lib.dcgan import build_generator, build_discriminator, build_train_step
 # from gan_lib.lsgan import build_generator, build_discriminator, build_train_step
 # from gan_lib.wgan_gp import build_generator, build_discriminator, build_train_step
 # from gan_lib.sngan import build_generator, build_discriminator, build_train_step
+# from gan_lib.sagan import build_generator, build_discriminator, build_train_step
 
 epoch = 50
 steps = 1000

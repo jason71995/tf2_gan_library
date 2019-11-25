@@ -20,6 +20,7 @@ tensorflow==2.0
  - LSGAN - Loss-Sensitive Generative Adversarial Networks on Lipschitz Densities [link](https://arxiv.org/abs/1701.06264)
  - WGAN-GP - Improved Training of Wasserstein GANs [link](https://arxiv.org/abs/1704.00028)
  - SNGAN - Spectral Normalization for Generative Adversarial Networks [link](https://arxiv.org/abs/1802.05957)
+ - SAGAN - Self-Attention Generative Adversarial Networks [link](https://arxiv.org/abs/1805.08318)
  
 ## Results
 
@@ -29,3 +30,4 @@ tensorflow==2.0
 | LSGAN | ![alt text](https://i.imgur.com/fEn0eFO.png "LSGAN") |
 | WGAN-GP | ![alt text](https://i.imgur.com/n6egM1D.png "WGAN-GP") |
 | SNGAN | ![alt text](https://i.imgur.com/sMXuAeD.png "SNGAN") |
+| SAGAN | ![alt text](https://i.imgur.com/akHOQBd.png "SAGAN") |
