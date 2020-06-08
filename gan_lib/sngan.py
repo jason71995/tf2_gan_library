@@ -9,6 +9,7 @@ import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Dense, Conv2D, GlobalAveragePooling2D, LeakyReLU, Conv2DTranspose
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.constraints import Constraint
 
 def build_generator(input_shape):
     x = Input(input_shape)
@@ -31,20 +32,20 @@ def build_generator(input_shape):
 def build_discriminator(input_shape):
     x = Input(input_shape)
 
-    y = SNConv2D(64, (3, 3), strides=(2,2), padding="same")(x)
+    y = Conv2D(64, (3, 3), kernel_constraint=SpectralNorm2D(64), strides=(2, 2), padding="same")(x)
     y = LeakyReLU(0.2)(y)
 
-    y = SNConv2D(128, (3, 3), strides=(2,2), padding="same")(y)
+    y = Conv2D(128, (3, 3), kernel_constraint=SpectralNorm2D(128), strides=(2, 2), padding="same")(y)
     y = LeakyReLU(0.2)(y)
 
-    y = SNConv2D(256, (3, 3), strides=(2,2), padding="same")(y)
+    y = Conv2D(256, (3, 3), kernel_constraint=SpectralNorm2D(256), strides=(2, 2), padding="same")(y)
     y = LeakyReLU(0.2)(y)
 
-    y = SNConv2D(512, (3, 3), strides=(2,2), padding="same")(y)
+    y = Conv2D(512, (3, 3), kernel_constraint=SpectralNorm2D(512), strides=(2, 2), padding="same")(y)
     y = LeakyReLU(0.2)(y)
 
     y = GlobalAveragePooling2D()(y)
-    y = SNDense(1)(y)
+    y = Dense(1, kernel_constraint=SpectralNorm1D(1))(y)
     return Model(x, y)
 
 def build_train_step(generator, discriminator):
@@ -73,56 +74,43 @@ def build_train_step(generator, discriminator):
 
     return train_step
 
-class SNConv2D(Conv2D):
-    def __init__(
-            self,
-            filters,
-            kernel_size,
-            strides=(1, 1),
-            padding='valid',
-            data_format=None,
-            dilation_rate=(1, 1),
-            activation=None,
-            use_bias=True,
-            kernel_initializer='glorot_uniform',
-            bias_initializer='zeros',
-            kernel_regularizer=None,
-            bias_regularizer=None,
-            activity_regularizer=None,
-            # kernel_constraint=None,
-            bias_constraint=None,
-            power_iterations = 1,
-            **kwargs):
-
-        super(SNConv2D, self).__init__(
-            filters=filters,
-            kernel_size=kernel_size,
-            strides=strides,
-            padding=padding,
-            data_format=data_format,
-            dilation_rate=dilation_rate,
-            activation=activation,
-            use_bias=use_bias,
-            kernel_initializer=kernel_initializer,
-            bias_initializer=bias_initializer,
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
-            activity_regularizer=activity_regularizer,
-            kernel_constraint=self.spectrally_norm,
-            bias_constraint=bias_constraint,
-            **kwargs)
+class SpectralNorm1D(Constraint):
+    def __init__(self, output_neurons, power_iterations=1):
 
         assert power_iterations>=1, "The number of power iterations should be positive integer"
-
         self.Ip = power_iterations
-        self.u = self.add_weight(
-            name='W_u',
-            shape=(1, filters),
-            initializer='random_uniform',
-            trainable=False
-        )
+        u_init = tf.random_uniform_initializer()
+        self.u = tf.Variable(initial_value = u_init(shape=(1, output_neurons), dtype='float32'),
+                             trainable = False)
 
-    def spectrally_norm(self, w):
+    def __call__(self, w):
+
+        W_mat = tf.transpose(w, (1, 0))  # (i, o) => (o, i)
+
+        _u = self.u
+        _v = None
+
+        for _ in range(self.Ip):
+            _v = l2_norm(tf.matmul(_u, W_mat))
+            _u = l2_norm(tf.matmul(_v, W_mat, transpose_b=True))
+
+        sigma = tf.reduce_sum(tf.matmul(_u, W_mat) * _v)
+        sigma = tf.cond(sigma == 0, lambda: 1e-8, lambda: sigma)
+
+        self.u.assign(tf.keras.backend.in_train_phase(_u, self.u))
+        return w / sigma
+
+class SpectralNorm2D(Constraint):
+    def __init__(self, output_neurons, power_iterations=1):
+
+        assert power_iterations>=1, "The number of power iterations should be positive integer"
+        self.Ip = power_iterations
+        u_init = tf.random_uniform_initializer()
+        self.u = tf.Variable(initial_value = u_init(shape=(1, output_neurons), dtype='float32'),
+                             trainable = False)
+
+    def __call__(self, w):
+
         W_mat = tf.transpose(w, (3, 2, 0, 1))  # (h, w, i, o) => (o, i, h, w)
         W_mat = tf.reshape(W_mat, [tf.shape(W_mat)[0], -1])  # (o, i * h * w)
 
@@ -130,8 +118,8 @@ class SNConv2D(Conv2D):
         _v = None
 
         for _ in range(self.Ip):
-            _v = self.l2_norm(tf.matmul(_u, W_mat))
-            _u = self.l2_norm(tf.matmul(_v, W_mat, transpose_b=True))
+            _v = l2_norm(tf.matmul(_u, W_mat))
+            _u = l2_norm(tf.matmul(_v, W_mat, transpose_b=True))
 
         sigma = tf.reduce_sum(tf.matmul(_u, W_mat) * _v)
         sigma = tf.cond(sigma == 0, lambda: 1e-8, lambda: sigma)
@@ -139,63 +127,5 @@ class SNConv2D(Conv2D):
         self.u.assign(tf.keras.backend.in_train_phase(_u, self.u))
         return w / sigma
 
-    def l2_norm(self, x):
-        return x / tf.sqrt(tf.reduce_sum(tf.square(x)) + 1e-8)
-
-class SNDense(Dense):
-    def __init__(
-            self,
-            units,
-            activation=None,
-            use_bias=True,
-            kernel_initializer='glorot_uniform',
-            bias_initializer='zeros',
-            kernel_regularizer=None,
-            bias_regularizer=None,
-            activity_regularizer=None,
-            # kernel_constraint=None,
-            bias_constraint=None,
-            power_iterations = 1,
-            **kwargs):
-
-        super(SNDense, self).__init__(
-            units,
-            activation=activation,
-            use_bias=use_bias,
-            kernel_initializer=kernel_initializer,
-            bias_initializer=bias_initializer,
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
-            activity_regularizer=activity_regularizer,
-            kernel_constraint=self.spectrally_norm,
-            bias_constraint=bias_constraint,
-            **kwargs)
-
-        assert power_iterations>=1, "The number of power iterations should be positive integer"
-
-        self.Ip = power_iterations
-        self.u = self.add_weight(
-            name='W_u',
-            shape=(1, units),
-            initializer='random_uniform',
-            trainable=False
-        )
-
-    def spectrally_norm(self, w):
-        W_mat = tf.transpose(w, (1, 0))  # (i, o) => (o, i)
-
-        _u = self.u
-        _v = None
-
-        for _ in range(self.Ip):
-            _v = self.l2_norm(tf.matmul(_u, W_mat))
-            _u = self.l2_norm(tf.matmul(_v, W_mat, transpose_b=True))
-
-        sigma = tf.reduce_sum(tf.matmul(_u, W_mat) * _v)
-        sigma = tf.cond(sigma == 0, lambda: 1e-8, lambda: sigma)
-
-        self.u.assign(tf.keras.backend.in_train_phase(_u, self.u))
-        return w / sigma
-
-    def l2_norm(self, x):
-        return x / tf.sqrt(tf.reduce_sum(tf.square(x)) + 1e-8)
+def l2_norm(x):
+    return x / tf.sqrt(tf.reduce_sum(tf.square(x)) + 1e-8)
